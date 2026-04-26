@@ -1,0 +1,211 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+  background: #0b0b12;
+  color: #fff;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+}
+
+.font-display {
+  font-family: Impact, "Haettenschweiler", "Arial Narrow Bold", "Arial Black", system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* Responsive background image swap. Mobile by default, desktop at md+. */
+.bg-meme-photo {
+  background-image: url("/6-7-mobile-background.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: scroll;
+}
+@media (min-width: 768px) {
+  .bg-meme-photo {
+    background-image: url("/6-7-desktop-background.png");
+    background-attachment: fixed;
+  }
+}
+
+.meme-outline {
+  -webkit-text-stroke: 2px black;
+  text-shadow: 3px 3px 0 #000;
+}
+
+.neon-pink-text {
+  color: #ff5cf0;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 3px rgba(255, 46, 166, 0.55),
+    2px 2px 0 #000;
+}
+
+.neon-cyan-text {
+  color: #d6fbff;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 3px rgba(0, 229, 255, 0.5),
+    1.5px 1.5px 0 #000;
+}
+
+.neon-yellow-text {
+  color: #fff7a3;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 3px rgba(255, 230, 0, 0.55),
+    1.5px 1.5px 0 #000;
+}
+
+.text-outline {
+  -webkit-text-stroke: 1.5px #000;
+  paint-order: stroke fill;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.title-white {
+  color: #fff;
+  -webkit-text-stroke: 1.5px #000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 4px rgba(255, 46, 166, 0.4),
+    2px 2px 0 #000;
+}
+
+.neon-box {
+  border: 2px solid #ff2ea6;
+  border-radius: 14px;
+  background: rgba(8, 6, 20, 0.78);
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 0 10px #ff2ea6,
+    0 0 22px rgba(255, 46, 166, 0.55);
+}
+
+.neon-box-cyan {
+  border: 2px solid #00e5ff;
+  border-radius: 14px;
+  background: rgba(8, 6, 20, 0.78);
+  box-shadow:
+    0 0 0 2px #000 inset,
+    0 0 10px #00e5ff,
+    0 0 22px rgba(0, 229, 255, 0.45);
+}
+
+.btn-meme {
+  @apply inline-flex items-center justify-center px-8 py-4 rounded-2xl font-display font-black text-2xl tracking-tight transition-transform active:scale-95 shadow-[6px_6px_0_0_rgba(0,0,0,0.6)] border-4 border-black;
+}
+
+.btn-invite {
+  @apply inline-flex items-center justify-center gap-3 px-10 py-5 rounded-2xl font-display font-black text-3xl md:text-4xl tracking-wide transition-transform active:scale-95;
+  color: #fff7e6;
+  background: linear-gradient(180deg, #ff3bbb 0%, #c81688 100%);
+  border: 3px solid #ff8be0;
+  box-shadow:
+    0 0 0 3px #000,
+    0 0 18px #ff2ea6,
+    0 0 36px rgba(255, 46, 166, 0.6),
+    6px 6px 0 0 rgba(0, 0, 0, 0.7);
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
+  text-shadow: 2px 2px 0 #000;
+}
+.btn-invite:hover { transform: translateY(-2px) rotate(-0.5deg); }
+
+.btn-invite-cyan {
+  @apply inline-flex items-center justify-center gap-3 px-10 py-5 rounded-2xl font-display text-3xl md:text-4xl tracking-wide transition-transform active:scale-95;
+  color: #eaffff;
+  background: linear-gradient(180deg, #2bd7ff 0%, #007a9a 100%);
+  border: 3px solid #8be8ff;
+  box-shadow:
+    0 0 0 3px #000,
+    0 0 18px #00e5ff,
+    0 0 36px rgba(0, 229, 255, 0.55),
+    6px 6px 0 0 rgba(0, 0, 0, 0.7);
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
+  text-shadow: 2px 2px 0 #000;
+}
+.btn-invite-cyan:hover { transform: translateY(-2px) rotate(0.5deg); }
+
+.nav-pill {
+  @apply inline-flex items-center px-3 py-1 rounded-md text-sm md:text-base;
+  font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", "Comic Neue", cursive, system-ui, sans-serif;
+  font-weight: 700;
+  border: 1.5px solid #ff8be0;
+  color: #fff;
+  background: rgba(8, 6, 20, 0.55);
+  box-shadow: 0 0 8px rgba(255, 46, 166, 0.6);
+  -webkit-text-stroke: 0.6px #000;
+  paint-order: stroke fill;
+  text-shadow: 1px 1px 0 #000;
+}
+.nav-pill:hover { background: rgba(255, 46, 166, 0.18); }
+
+.panel {
+  @apply rounded-3xl bg-black/60 border border-white/15 p-5;
+}
+
+/* Repeating "67" side rails like the reference */
+.rail-67 {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-family: Impact, "Arial Black", system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1;
+  color: #ff5cf0;
+  text-shadow: 0 0 6px #ff2ea6, 0 0 12px #ff2ea6;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  letter-spacing: 4px;
+  white-space: nowrap;
+  opacity: 0.95;
+  z-index: 5;
+}
+.rail-67.left { left: 4px; }
+.rail-67.right { right: 4px; }
+
+.rail-67-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 22px;
+  font-family: Impact, "Arial Black", system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 16px;
+  line-height: 22px;
+  color: #ff5cf0;
+  text-shadow: 0 0 6px #ff2ea6, 0 0 12px #ff2ea6;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  white-space: nowrap;
+  letter-spacing: 4px;
+  text-align: center;
+  opacity: 0.95;
+  z-index: 5;
+}
+.rail-67-h.top { top: 0; }
+.rail-67-h.bot { bottom: 0; }
+
+/* Small scrollbar tweak */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 8px; }
+::-webkit-scrollbar-track { background: #111; }
