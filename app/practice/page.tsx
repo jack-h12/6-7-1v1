@@ -29,7 +29,7 @@ export default function PracticePage() {
     if (MILESTONES[snap.reps]) {
       showFlash(MILESTONES[snap.reps]);
     } else if (snap.combo >= 3 && snap.combo % 5 === 0) {
-      showFlash(`MEME COMBO x${snap.combo}`);
+      showFlash(`6-7 COMBO x${snap.combo}`);
     }
   }, [soundOn]);
 

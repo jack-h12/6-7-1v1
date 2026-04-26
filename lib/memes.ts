@@ -1,40 +1,36 @@
 /** Random meme banter strings sprinkled into the UI. */
 
 export const WIN_TAGLINES = [
-  "Certified meme lord.",
-  "Wrist of the generation.",
+  "67 king",
   "They will study this at Harvard.",
-  "Undisputed 6-7 champion.",
+  "Undisputed 67 champion.",
   "You cooked. Deeply.",
 ];
 
 export const LOSE_TAGLINES = [
-  "Respectfully… mid.",
-  "L + ratio + take the stairs.",
-  "Touch some grass. Rematch?",
-  "The algorithm is disappointed.",
-  "Wrist game needs work.",
+  "L + ratio + your brain is still healthy",
+  "Brain has not rotted",
+  "67 game needs work.",
 ];
 
 export const TIE_TAGLINES = [
   "Evenly deranged.",
   "Balanced. As all things should be.",
-  "Both certified yappers. No winners.",
+  "Both equally brainrotted. No winners.",
 ];
 
 export const ILLEGAL_CALLOUTS = [
   "Illegal technique detected!",
-  "Suspicious wrist activity.",
-  "The FBI is watching.",
-  "Blatant violation of the Geneva Convention.",
+  "That ain't the 67 twin",
+  "Whatchu doing gng that ain't it",
 ];
 
 export const MILESTONES: Record<number, string> = {
   5: "NICE.",
-  10: "MEME COMBO!",
-  15: "CERTIFIED YAPPER",
+  10: "COOKING",
+  15: "67676767",
   20: "UNHINGED",
-  25: "WRIST OF THE GODS",
+  25: "USAIN BOLT WASN'T THIS FAST",
   30: "CALL AN AMBULANCE",
   40: "UNSTOPPABLE",
   50: "BEYOND HUMAN",

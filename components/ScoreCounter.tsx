@@ -41,7 +41,7 @@ export function ScoreCounter({ score, label = "SCORE", combo = 0, comboMultiplie
       </div>
       {combo >= 2 && (
         <div className="mt-2 font-display font-black text-meme-pink text-2xl animate-shake">
-          MEME COMBO x{combo}
+          6-7 COMBO x{combo}
           {comboMultiplier > 1 && <span className="text-white/80"> · {comboMultiplier}x</span>}
         </div>
       )}
