@@ -42,7 +42,7 @@ export class DuelClient {
   async createAsHost(preferredId?: string): Promise<string> {
     const Peer = (await import("peerjs")).default;
     this.role = "host";
-    const peer = new Peer(preferredId ?? undefined, { debug: 1 });
+    const peer = preferredId ? new Peer(preferredId, { debug: 1 }) : new Peer({ debug: 1 });
     this.peer = peer;
     return new Promise((resolve, reject) => {
       peer.on("open", (id) => {
@@ -63,7 +63,7 @@ export class DuelClient {
   async joinAsGuest(hostId: string): Promise<void> {
     const Peer = (await import("peerjs")).default;
     this.role = "guest";
-    const peer = new Peer(undefined, { debug: 1 });
+    const peer = new Peer({ debug: 1 });
     this.peer = peer;
     return new Promise((resolve, reject) => {
       peer.on("open", (id) => {
