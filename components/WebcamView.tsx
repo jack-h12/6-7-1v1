@@ -15,6 +15,8 @@ export interface WebcamViewProps {
   state?: GestureState;
   mirrored?: boolean;
   className?: string;
+  /** Fires when the local MediaStream becomes available (or null on teardown). */
+  onStream?: (stream: MediaStream | null) => void;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface WebcamViewProps {
  *   - A state badge in the corner (not mirrored so text reads correctly).
  */
 export const WebcamView = forwardRef<HTMLVideoElement, WebcamViewProps>(function WebcamView(
-  { active, handsRef, topLine = 0.35, bottomLine = 0.65, state, mirrored = true, className },
+  { active, handsRef, topLine = 0.35, bottomLine = 0.65, state, mirrored = true, className, onStream },
   ref
 ) {
   const internalVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -54,7 +56,7 @@ export const WebcamView = forwardRef<HTMLVideoElement, WebcamViewProps>(function
             facingMode: "user",
             frameRate: { ideal: 60, min: 30 },
           },
-          audio: false,
+          audio: true,
         });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -65,6 +67,7 @@ export const WebcamView = forwardRef<HTMLVideoElement, WebcamViewProps>(function
         v.srcObject = stream;
         await v.play().catch(() => {});
         setReady(true);
+        onStream?.(stream);
       } catch (e: any) {
         setError(e?.message ?? "Could not access webcam");
       }
@@ -75,7 +78,9 @@ export const WebcamView = forwardRef<HTMLVideoElement, WebcamViewProps>(function
       const v = internalVideoRef.current;
       if (v) v.srcObject = null;
       stream?.getTracks().forEach((t) => t.stop());
+      onStream?.(null);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   // Overlay loop — single stable raf reading the live hands ref every frame.

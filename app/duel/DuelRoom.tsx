@@ -47,6 +47,8 @@ export function DuelRoom({ role, code, onExit }: Props) {
   const [oppFinal, setOppFinal] = useState<number | null>(null);
   const [myFinal, setMyFinal] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState(DURATION_MS);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [hasRemoteStream, setHasRemoteStream] = useState(false);
 
   const clientRef = useRef<DuelClient | null>(null);
   const startAtRef = useRef<number | null>(null);
@@ -76,6 +78,15 @@ export function DuelRoom({ role, code, onExit }: Props) {
       },
       onError: (e) => {
         if (!cancelled) setConnErr(e.message);
+      },
+      onRemoteStream: (stream) => {
+        if (cancelled) return;
+        const v = remoteVideoRef.current;
+        if (v) {
+          v.srcObject = stream;
+          v.play().catch(() => {});
+        }
+        setHasRemoteStream(true);
       },
     });
     clientRef.current = client;
@@ -290,6 +301,7 @@ export function DuelRoom({ role, code, onExit }: Props) {
                 bottomLine={GestureConfig.BOTTOM_Y}
                 state={snapshot.state}
                 className="aspect-[4/3] w-full"
+                onStream={(s) => clientRef.current?.setLocalStream(s)}
               />
               {phase === "countdown" && (
                 <Countdown seconds={3} onDone={onCountdownDone} playSound={soundOn} />
@@ -314,12 +326,20 @@ export function DuelRoom({ role, code, onExit }: Props) {
                 </span>
               </div>
               <div className="aspect-[4/3] w-full rounded-2xl border-4 border-black bg-black/60 grid place-items-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-meme-gradient bg-[length:300%_300%] animate-gradient-pan opacity-25" />
-                <div className="relative text-center p-6">
-                  <div className="text-8xl md:text-9xl font-display font-black meme-outline text-meme-pink animate-score-pop" key={oppScore}>
+                <video
+                  ref={remoteVideoRef}
+                  className={`absolute inset-0 w-full h-full object-cover scale-x-[-1] ${hasRemoteStream ? "" : "hidden"}`}
+                  playsInline
+                  autoPlay
+                />
+                {!hasRemoteStream && (
+                  <div className="absolute inset-0 bg-meme-gradient bg-[length:300%_300%] animate-gradient-pan opacity-25" />
+                )}
+                <div className="relative text-center p-6 bg-black/40 rounded-xl">
+                  <div className="text-7xl md:text-8xl font-display font-black meme-outline text-meme-pink animate-score-pop" key={oppScore}>
                     {phase === "finished" && oppFinal != null ? oppFinal : oppScore}
                   </div>
-                  <div className="mt-3 text-white/70 tracking-widest font-display font-black">OPP SCORE</div>
+                  <div className="mt-2 text-white/80 tracking-widest font-display font-black">OPP SCORE</div>
                   {oppCombo >= 3 && phase === "running" && (
                     <div className="mt-2 font-display font-black text-meme-yellow text-xl animate-shake">
                       COMBO x{oppCombo}
