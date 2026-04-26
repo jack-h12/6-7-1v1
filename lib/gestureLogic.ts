@@ -1,40 +1,34 @@
 /**
- * 6-7 Gesture Detector — alternating two-hand state machine with role reversal.
+ * 6-7 Gesture Detector — high-speed event-driven state machine.
  * ---------------------------------------------------------------------------
  * Rep rule:
  *   • One wrist crosses one boundary (top or bottom).
  *   • The OTHER wrist then crosses the OPPOSITE boundary.
  *   • Together that completes one rep.
  *
- * Alternation rule (kicks in after rep 1):
- *   • The wrist that crossed TOP last rep must next cross BOTTOM.
- *   • The wrist that crossed BOTTOM last rep must next cross TOP.
- *   Any edge that violates this is ignored — it cannot count toward a rep.
+ * Alternation: rep N+1 must reverse rep N — the wrist that crossed TOP must
+ * next cross BOTTOM, and vice versa.
  *
- * Within a single rep, the two halves can arrive in either order; we just
- * require: different wrists, opposite boundaries.
+ * State machine: IDLE  ──valid edge──▶  ARMED(pending)  ──completing edge──▶ rep++ → IDLE
  *
- * Robustness (each is REQUIRED, not optional):
- *   • EDGE detection — we fire a crossing event only on the frame where the
- *     wrist TRANSITIONED across the boundary (previous frame on one side,
- *     current frame on the other). Level-based hovering produces zero events.
- *   • PER-EDGE DEBOUNCE (EDGE_DEBOUNCE_MS): the same wrist+boundary edge
- *     cannot fire twice within the window, so jitter around a threshold
- *     can never multi-trigger.
- *   • EMA SMOOTHING of wrist Y values before any threshold check.
- *   • TIMEOUT RESET: if the second half of a rep doesn't arrive within
- *     STATE_TIMEOUT_MS, we drop the pending half and break the combo.
- *     The role-reversal expectation from the LAST COMPLETED rep is preserved.
- *   • MISSING-HAND TOLERANCE: null inputs are treated as "no new sample" —
- *     EMA and prev-Y are frozen for that hand, no phantom edges.
- *   • STRICT MATCHING: a wrong-hand / wrong-boundary event is ignored and
- *     logged, never partially advances the machine.
+ * Designed for fast users, never gets stuck:
+ *   • Latest-wins: in ARMED, any new edge that does NOT complete the rep
+ *     instantly REPLACES pending. A broken first half cannot trap the counter.
+ *   • Instant recovery: an alternation-violating edge clears `expected` and
+ *     is then processed as a fresh first half — so a missed rep (vision
+ *     dropped both halves) self-recovers within ONE edge.
+ *   • No long timeouts. Pending sits until a new edge replaces or completes
+ *     it; nothing decays based on time.
+ *   • Tiny debounce (~3 frames at 60fps) — only enough to absorb jitter at
+ *     the boundary lines.
+ *   • Off-screen resume snap prevents phantom edges from a stale prev-Y when
+ *     a wrist disappears and reappears in a different position.
  */
 
 export type Wrist = "left" | "right";
 export type Boundary = "top" | "bottom";
 
-export type GestureState = "WAIT_FIRST_HALF" | "WAIT_SECOND_HALF";
+export type GestureState = "IDLE" | "ARMED";
 
 /** Which wrist must cross which boundary this rep, once alternation is established. */
 interface ExpectedAssignment {
@@ -55,14 +49,13 @@ export interface GestureConfigShape {
   TOP_Y: number;
   /** Y below this = "BOTTOM zone". */
   BOTTOM_Y: number;
-  /** Per-edge debounce — a given wrist+boundary edge cannot re-fire within this window. */
+  /** Per-edge debounce — a given wrist+boundary edge cannot re-fire within this window.
+   *  Keep this short (≈3 frames at 60fps) — just enough to absorb jitter. */
   EDGE_DEBOUNCE_MS: number;
-  /** If a started rep doesn't complete within this, drop the pending half and break combo. */
-  STATE_TIMEOUT_MS: number;
   /** If a wrist hasn't been seen for this long, treat the next sighting as a fresh start
    *  (no phantom edge from a stale prev-Y left over from before it went off-screen). */
   OFFSCREEN_RESUME_MS: number;
-  /** Exponential-moving-average alpha applied to wrist Y (higher = snappier). */
+  /** EMA alpha applied to wrist Y (1 = no smoothing, just passthrough). */
   EMA_ALPHA: number;
   /** Window in which consecutive reps extend the combo counter (UI flair). */
   COMBO_WINDOW_MS: number;
@@ -71,13 +64,13 @@ export interface GestureConfigShape {
 export const GestureConfig: GestureConfigShape = {
   TOP_Y: 0.35,
   BOTTOM_Y: 0.65,
-  EDGE_DEBOUNCE_MS: 150,
+  // ~3 frames at 60fps. Long enough to suppress single-pixel jitter around
+  // the threshold lines; short enough that fast users never feel held back.
+  EDGE_DEBOUNCE_MS: 50,
   OFFSCREEN_RESUME_MS: 150,
-  STATE_TIMEOUT_MS: 1500,
-  // Near-passthrough: this is a speed contest, so we eat almost no
-  // smoothing latency. Per-edge debounce handles hover jitter; landmark
-  // spikes are rare enough to ignore.
-  EMA_ALPHA: 0.9,
+  // No smoothing — every ms of lag matters in a speed contest. Debounce +
+  // edge-state semantics handle landmark noise without filter delay.
+  EMA_ALPHA: 1.0,
   COMBO_WINDOW_MS: 900,
 };
 
@@ -124,11 +117,12 @@ const LOG_CAP = 16;
 
 export class GestureDetector {
   // --- state ---
-  private state: GestureState = "WAIT_FIRST_HALF";
-  private stateEnteredAt = 0;
+  private state: GestureState = "IDLE";
   /** First half of the current rep, captured but not yet completed. */
   private pending: PendingEdge | null = null;
-  /** After rep 1, what wrist must cross top vs. bottom this rep. Null only before first rep. */
+  /** Required wrist→boundary assignment for the current rep, established by the
+   *  previous completed rep's role-reversal. Null before rep 1, and cleared
+   *  whenever an alternation-violating edge fires (instant recovery). */
   private expected: ExpectedAssignment | null = null;
 
   // --- score / combo (UI) ---
@@ -170,8 +164,7 @@ export class GestureDetector {
   }
 
   reset() {
-    this.state = "WAIT_FIRST_HALF";
-    this.stateEnteredAt = 0;
+    this.state = "IDLE";
     this.pending = null;
     this.expected = null;
     this.reps = 0;
@@ -184,7 +177,7 @@ export class GestureDetector {
     this.lastRightSampleAt = 0;
     this.lastEdgeAt = { "right-top": 0, "right-bottom": 0, "left-top": 0, "left-bottom": 0 };
     this.log = [];
-    this.pushLog(0, "reset → WAIT_FIRST_HALF");
+    this.pushLog(0, "reset → IDLE");
   }
 
   /**
@@ -227,34 +220,17 @@ export class GestureDetector {
       this.lastLeftSampleAt = t;
     }
 
-    // --- 2. TIMEOUT RESET — pending half didn't get its partner in time ---
-    if (
-      this.state === "WAIT_SECOND_HALF" &&
-      this.stateEnteredAt > 0 &&
-      t - this.stateEnteredAt > cfg.STATE_TIMEOUT_MS
-    ) {
-      this.pushLog(t, `timeout after ${cfg.STATE_TIMEOUT_MS}ms → WAIT_FIRST_HALF`);
-      this.state = "WAIT_FIRST_HALF";
-      this.stateEnteredAt = t;
-      this.pending = null;
-      this.combo = 0;
-      // Freeze prev to current smoothed so the first post-reset frame
-      // doesn't generate a phantom edge from a stale comparison.
-      this.prevLeft = this.smoothedLeft;
-      this.prevRight = this.smoothedRight;
-    }
-
-    // --- 3. EDGE DETECTION — all four wrist+boundary edges feed handleEdge ---
+    // --- 2. EDGE DETECTION — all four wrist+boundary edges feed handleEdge ---
     this.checkEdge("right", "top", this.prevRight, this.smoothedRight, t);
     this.checkEdge("right", "bottom", this.prevRight, this.smoothedRight, t);
     this.checkEdge("left", "top", this.prevLeft, this.smoothedLeft, t);
     this.checkEdge("left", "bottom", this.prevLeft, this.smoothedLeft, t);
 
-    // --- 4. Advance prev only where we had a fresh sample this frame ---
+    // --- 3. Advance prev only where we had a fresh sample this frame ---
     if (rightY != null) this.prevRight = this.smoothedRight;
     if (leftY != null) this.prevLeft = this.smoothedLeft;
 
-    // --- 5. Combo expiry (cosmetic) ---
+    // --- 4. Combo expiry (cosmetic) ---
     if (this.combo > 0 && t > this.comboExpiresAt) this.combo = 0;
 
     return this.snapshot(rightY != null, leftY != null);
@@ -273,36 +249,54 @@ export class GestureDetector {
 
   /** Handle a crossing event against the state machine. */
   private handleEdge(wrist: Wrist, boundary: Boundary, t: number) {
-    // After rep 1: only the two edges that match this rep's role assignment count.
+    // 1. Alternation check. A violation means the user's gesture pattern has
+    //    drifted from what the prior rep set up — most commonly because vision
+    //    dropped a rep entirely. Clear `expected` immediately so this very edge
+    //    can re-arm a fresh attempt instead of locking the counter out.
     if (this.expected) {
-      const requiredWrist = boundary === "top" ? this.expected.topWrist : this.expected.bottomWrist;
+      const requiredWrist =
+        boundary === "top" ? this.expected.topWrist : this.expected.bottomWrist;
       if (wrist !== requiredWrist) {
-        this.pushLog(t, `ignored ${wrist}→${boundary} (alternation: need ${requiredWrist}→${boundary})`);
-        return;
+        this.pushLog(
+          t,
+          `${wrist}→${boundary} violates alternation (need ${requiredWrist}→${boundary}) — clearing expected, recovering`,
+        );
+        this.expected = null;
+        // Also drop any pending half: the rep we were assembling assumed an
+        // alternation that no longer holds.
+        this.pending = null;
+        this.state = "IDLE";
+        // Fall through and process this edge as a fresh first half.
       }
     }
 
-    if (this.state === "WAIT_FIRST_HALF") {
+    // 2. IDLE → ARMED.
+    if (this.state === "IDLE") {
       this.pending = { wrist, boundary };
-      this.state = "WAIT_SECOND_HALF";
-      this.stateEnteredAt = t;
-      this.pushLog(t, `${wrist.toUpperCase()}→${boundary.toUpperCase()} (first half) → WAIT_SECOND_HALF`);
+      this.state = "ARMED";
+      this.pushLog(t, `ARM ${wrist}→${boundary}`);
       return;
     }
 
-    // WAIT_SECOND_HALF — must be the OTHER wrist on the OPPOSITE boundary.
+    // 3. ARMED — does this edge complete the rep?
     const p = this.pending!;
-    if (wrist !== otherWrist(p.wrist) || boundary !== otherBoundary(p.boundary)) {
-      this.pushLog(
-        t,
-        `ignored ${wrist}→${boundary} (need ${otherWrist(p.wrist)}→${otherBoundary(p.boundary)})`,
-      );
+    const completes = wrist !== p.wrist && boundary !== p.boundary;
+    if (completes) {
+      this.completeRep(p, { wrist, boundary }, t);
       return;
     }
 
-    // Valid completion — score it.
-    const topWrist: Wrist = boundary === "top" ? wrist : p.wrist;
-    const bottomWrist: Wrist = boundary === "bottom" ? wrist : p.wrist;
+    // 4. ARMED but not a completing edge — latest valid first-crossing wins.
+    //    Same wrist re-crossed, or other wrist crossed the same boundary.
+    //    Either way, the prior pending half is now stale; the freshest edge
+    //    is the better candidate for "first half of the next rep attempt".
+    this.pushLog(t, `replace pending ${p.wrist}→${p.boundary} with ${wrist}→${boundary} (latest wins)`);
+    this.pending = { wrist, boundary };
+  }
+
+  private completeRep(first: PendingEdge, second: PendingEdge, t: number) {
+    const topWrist: Wrist = first.boundary === "top" ? first.wrist : second.wrist;
+    const bottomWrist: Wrist = first.boundary === "bottom" ? first.wrist : second.wrist;
     this.reps += 1;
     if (t < this.comboExpiresAt) this.combo += 1;
     else this.combo = 1;
@@ -311,12 +305,10 @@ export class GestureDetector {
     // Next rep must reverse roles.
     this.expected = { topWrist: bottomWrist, bottomWrist: topWrist };
     this.pending = null;
-    this.state = "WAIT_FIRST_HALF";
-    this.stateEnteredAt = t;
+    this.state = "IDLE";
     this.pushLog(
       t,
-      `${wrist.toUpperCase()}→${boundary.toUpperCase()} ✓ rep=${this.reps} ` +
-        `next: top=${this.expected.topWrist} bottom=${this.expected.bottomWrist}`,
+      `rep=${this.reps} ✓ (top=${topWrist}, bottom=${bottomWrist}) → next expects top=${this.expected.topWrist}, bottom=${this.expected.bottomWrist}`,
     );
     this.onRep?.(this.snapshot(true, true));
   }
