@@ -219,10 +219,27 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
                 // for a React render.
                 handsRef.current = { left: leftHand, right: rightHand };
 
-                // ---- Feed the detector: one wrist Y per hand (null if absent) ----
-                const rightY = rightHand?.[0]?.y ?? null;
-                const leftY = leftHand?.[0]?.y ?? null;
-                const snap = detectorRef.current.update({ rightY, leftY, t });
+                // ---- Feed the detector: per-hand vertical extents across all landmarks ----
+                const extents = (h: HandLandmark[] | null) => {
+                  if (!h || h.length === 0) return { min: null, max: null } as const;
+                  let min = h[0].y;
+                  let max = h[0].y;
+                  for (let i = 1; i < h.length; i++) {
+                    const y = h[i].y;
+                    if (y < min) min = y;
+                    if (y > max) max = y;
+                  }
+                  return { min, max } as const;
+                };
+                const re = extents(rightHand);
+                const le = extents(leftHand);
+                const snap = detectorRef.current.update({
+                  rightMinY: re.min,
+                  rightMaxY: re.max,
+                  leftMinY: le.min,
+                  leftMaxY: le.max,
+                  t,
+                });
                 publishSnapshot(snap);
               } catch (e) {
                 // eslint-disable-next-line no-console

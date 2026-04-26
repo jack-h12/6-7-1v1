@@ -155,50 +155,36 @@ body {
   @apply rounded-3xl bg-black/60 border border-white/15 p-5;
 }
 
-/* Repeating "67" side rails like the reference */
+/* Repeating 6-7-kid side rails */
 .rail-67 {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 28px;
+  width: 22px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  font-family: Impact, "Arial Black", system-ui, sans-serif;
-  font-weight: 900;
-  font-size: 18px;
-  line-height: 1;
-  color: #ff5cf0;
-  text-shadow: 0 0 6px #ff2ea6, 0 0 12px #ff2ea6;
+  align-items: center;
   pointer-events: none;
   user-select: none;
   overflow: hidden;
-  writing-mode: vertical-rl;
-  letter-spacing: 4px;
-  white-space: nowrap;
   opacity: 0.95;
   z-index: 5;
 }
-.rail-67.left { left: 4px; }
-.rail-67.right { right: 4px; }
+.rail-67.left { left: 0; }
+.rail-67.right { right: 0; }
 
 .rail-67-h {
   position: absolute;
   left: 0;
   right: 0;
   height: 22px;
-  font-family: Impact, "Arial Black", system-ui, sans-serif;
-  font-weight: 900;
-  font-size: 16px;
-  line-height: 22px;
-  color: #ff5cf0;
-  text-shadow: 0 0 6px #ff2ea6, 0 0 12px #ff2ea6;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
   pointer-events: none;
   user-select: none;
   overflow: hidden;
-  white-space: nowrap;
-  letter-spacing: 4px;
-  text-align: center;
   opacity: 0.95;
   z-index: 5;
 }

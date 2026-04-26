@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Leaderboard } from "@/components/Leaderboard";
 import { SoundToggle } from "@/components/SoundToggle";
-
-const RAIL_TEXT = "6767676767676767676767676767676767676767676767676767676767676767676767676767";
+import { Rails67 } from "@/components/Rails67";
 
 export default function Landing() {
   return (
@@ -12,11 +11,8 @@ export default function Landing() {
       {/* subtle magenta vignette like the reference */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(120,0,80,0.35)_100%)]" />
 
-      {/* "67" rails */}
-      <div className="rail-67 left">{RAIL_TEXT}</div>
-      <div className="rail-67 right">{RAIL_TEXT}</div>
-      <div className="rail-67-h top">{RAIL_TEXT}</div>
-      <div className="rail-67-h bot">{RAIL_TEXT}</div>
+      {/* "6-7" rails — auto-fit to viewport */}
+      <Rails67 />
 
       <div className="relative z-10 container mx-auto px-8 pt-10 pb-8 max-w-6xl">
         {/* Top nav */}
@@ -63,7 +59,7 @@ export default function Landing() {
         </section>
 
         {/* Feature row */}
-        <section className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <section className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
           <div className="neon-box-cyan p-5 text-center">
             <div className="font-display text-lg neon-cyan-text">POWER UP CAMERA</div>
             <div className="my-4 text-5xl" aria-hidden>📱</div>
@@ -73,17 +69,10 @@ export default function Landing() {
           </div>
 
           <div className="neon-box-cyan p-5 text-center">
-            <div className="font-display text-lg neon-cyan-text">THE 6-7 PUMP MOTION</div>
-            <div className="text-xs text-white/80 -mt-1">(Up & Down!)</div>
-            <div className="my-4 text-5xl flex justify-center gap-2 items-center" aria-hidden>
-              <span>🤚</span>
-              <span className="text-base">↕</span>
-              <span>🤚</span>
-              <span className="text-base">↕</span>
-              <span>🤚</span>
-            </div>
-            <div className="font-display text-xs tracking-wide text-white" style={{ textShadow: "1px 1px 0 #000" }}>
-              Rapid vertical oscillation movement
+            <div className="font-display text-lg neon-cyan-text">THE 6-7 MOTION</div>
+            <div className="my-4 flex justify-center items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/6-7-gif.gif" alt="6-7 motion" className="h-24 w-auto" />
             </div>
           </div>
 
@@ -97,19 +86,35 @@ export default function Landing() {
           </div>
 
           {/* Mock scoreboard card */}
-          <div className="neon-box p-4">
-            <div className="grid grid-cols-3 gap-2 items-center text-center">
-              <div className="font-display text-xs neon-cyan-text">YOU</div>
-              <div className="font-display text-xs neon-pink-text">6-7</div>
-              <div className="font-display text-xs neon-pink-text">OPPONENT</div>
-
-              <div className="text-3xl" aria-hidden>🧑🏽‍🦱</div>
-              <div className="font-display text-2xl neon-yellow-text">10s</div>
-              <div className="text-3xl" aria-hidden>🧒</div>
-
-              <div className="rounded-md bg-cyan-500/30 border border-cyan-300/60 py-2 font-display text-cyan-100">0</div>
+          <div className="neon-box p-4 sm:col-span-2 lg:col-span-2">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center text-center">
+              <div className="font-display font-black text-2xl tracking-widest neon-cyan-text">YOU</div>
               <div></div>
-              <div className="rounded-md bg-pink-500/30 border border-pink-300/60 py-2 font-display text-pink-100">0</div>
+              <div className="font-display font-black text-2xl tracking-widest neon-pink-text">OPPONENT</div>
+
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/6-7-kid-eyes-blazing.jpeg"
+                alt=""
+                className="mx-auto h-24 w-24 object-cover rounded-md border-4 border-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]"
+              />
+              <div className="font-display font-black text-2xl px-4 py-2 rounded-md bg-black/60 border-4 border-yellow-300 text-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.8)]">
+                10s
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/6-7-kid-eyes-blazing.jpeg"
+                alt=""
+                className="mx-auto h-24 w-24 object-cover rounded-md border-4 border-pink-400 shadow-[0_0_14px_rgba(244,114,182,0.9)]"
+              />
+
+              <div className="whitespace-nowrap rounded-md bg-cyan-500 border-2 border-cyan-200 py-2 px-3 font-display font-black text-xl tracking-wider text-white shadow-[0_0_10px_rgba(34,211,238,0.7)]" style={{ textShadow: "2px 2px 0 #000" }}>
+                SCORE: 67
+              </div>
+              <div></div>
+              <div className="whitespace-nowrap rounded-md bg-pink-500 border-2 border-pink-200 py-2 px-3 font-display font-black text-xl tracking-wider text-white shadow-[0_0_10px_rgba(244,114,182,0.7)]" style={{ textShadow: "2px 2px 0 #000" }}>
+                SCORE: 76
+              </div>
             </div>
           </div>
         </section>
