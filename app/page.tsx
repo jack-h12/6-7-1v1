@@ -125,11 +125,11 @@ export default function Landing() {
         {/* How to play + leaderboard */}
         <section id="how" className="mt-10 grid md:grid-cols-2 gap-5">
           <div className="neon-box p-5">
-            <div className="font-display text-xl mb-2 tracking-widest neon-pink-text">HOW TO PLAY (IT&apos;S COOKED)</div>
+            <div className="font-display text-xl mb-2 tracking-widest neon-pink-text">HOW TO PLAY</div>
             <ol className="space-y-2 text-white/90 list-decimal list-inside text-sm font-mono">
-              <li>Allow your webcam. We see you. You signed up for this.</li>
-              <li>Pump your hand <b>UP / DOWN / UP / DOWN</b> like you&apos;re saying <span className="neon-yellow-text">six</span>… <span className="neon-pink-text">seven</span>…</li>
-              <li>Each full crossover = +1 to the brainrot meter.</li>
+              <li>Allow your webcam. We won&apos;t harvest your data no cap.</li>
+              <li>One hand has to cross into the <span className="neon-yellow-text">TOP</span> boundary while the other is in the <span className="neon-pink-text">BOTTOM</span> boundary — that&apos;s <b>one rep</b>. Then swap them.</li>
+              <li>Each full swap = +1 to the brainrot meter.</li>
               <li>10 seconds. Highest reps wins. Loser&apos;s brain is officially less rotted (sad).</li>
             </ol>
           </div>
