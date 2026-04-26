@@ -4,6 +4,7 @@ import { AuthButton } from "@/components/AuthButton";
 import { SoundToggle } from "@/components/SoundToggle";
 import { MobileNav } from "@/components/MobileNav";
 import { Rails67 } from "@/components/Rails67";
+import { HomeSong } from "@/components/HomeSong";
 
 export default function Landing() {
   return (
@@ -15,6 +16,8 @@ export default function Landing() {
 
       {/* "6-7" rails — auto-fit to viewport */}
       <Rails67 />
+
+      <HomeSong />
 
       <div className="relative z-10 container mx-auto px-8 pt-10 pb-8 max-w-6xl">
         {/* Top nav — full set on md+, just sound + burger on mobile */}
@@ -37,7 +40,21 @@ export default function Landing() {
         </nav>
 
         {/* Hero */}
-        <section className="mt-8 md:mt-10 text-center">
+        <section className="relative mt-8 md:mt-10 text-center">
+          {/* Left flank — sits below hero text on mobile, flanks the title on md+ */}
+          <div className="flex absolute left-0 -translate-x-6 sm:-translate-x-4 md:-translate-x-8 lg:-translate-x-20 xl:-translate-x-36 top-full -translate-y-2 md:top-1/2 md:-translate-y-1/2 items-center gap-1 pointer-events-none select-none">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/6-7-gif.gif" alt="" aria-hidden className="h-10 sm:h-14 md:h-20 lg:h-28 xl:h-32 w-auto" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/tungtungtungsahur.gif" alt="" aria-hidden className="h-14 sm:h-20 md:h-28 lg:h-40 xl:h-48 w-auto" />
+          </div>
+          {/* Right flank */}
+          <div className="flex absolute right-0 translate-x-6 sm:translate-x-4 md:translate-x-8 lg:translate-x-20 xl:translate-x-36 top-full -translate-y-2 md:top-1/2 md:-translate-y-1/2 items-center gap-1 pointer-events-none select-none">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/tungtungtungsahur.gif" alt="" aria-hidden className="h-14 sm:h-20 md:h-28 lg:h-40 xl:h-48 w-auto scale-x-[-1]" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/6-7-gif.gif" alt="" aria-hidden className="h-10 sm:h-14 md:h-20 lg:h-28 xl:h-32 w-auto" />
+          </div>
           <h1 className="font-display leading-[0.95] title-white text-4xl sm:text-5xl md:text-7xl lg:text-8xl tracking-tight">
             THE ULTIMATE 6-7 OFF
           </h1>
