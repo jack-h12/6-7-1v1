@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Leaderboard } from "@/components/Leaderboard";
+import { AuthButton } from "@/components/AuthButton";
 import { SoundToggle } from "@/components/SoundToggle";
 import { Rails67 } from "@/components/Rails67";
 
@@ -24,6 +25,8 @@ export default function Landing() {
           <a href="#leaderboard" className="nav-pill">[Most Brainrotted (Leaderboard)]</a>
           <span className="text-white/60 font-black">|</span>
           <a href="#how" className="nav-pill">[How to Play]</a>
+          <span className="text-white/60 font-black">|</span>
+          <AuthButton />
           <div className="ml-auto hidden md:block"><SoundToggle /></div>
         </nav>
 
