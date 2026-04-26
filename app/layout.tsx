@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "6-7 Duel",
   description: "A head-to-head 6-7 meme competition. Webcam + hand-tracking.",
+  icons: { icon: "/6-7-kid.jpeg" },
 };
 
 export const viewport: Viewport = {
