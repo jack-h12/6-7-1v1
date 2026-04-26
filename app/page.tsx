@@ -2,22 +2,23 @@ import Link from "next/link";
 import { Leaderboard } from "@/components/Leaderboard";
 import { AuthButton } from "@/components/AuthButton";
 import { SoundToggle } from "@/components/SoundToggle";
+import { MobileNav } from "@/components/MobileNav";
 import { Rails67 } from "@/components/Rails67";
 
 export default function Landing() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-meme-photo">
       {/* light wash so foreground text reads but the photo stays visible */}
-      <div className="absolute inset-0 bg-black/20" />
-      {/* subtle magenta vignette like the reference */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(120,0,80,0.35)_100%)]" />
+      <div className="absolute inset-0 bg-black/5 md:bg-black/20" />
+      {/* subtle magenta vignette like the reference — softer on mobile */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_70%,rgba(120,0,80,0.15)_100%)] md:bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(120,0,80,0.35)_100%)]" />
 
       {/* "6-7" rails — auto-fit to viewport */}
       <Rails67 />
 
       <div className="relative z-10 container mx-auto px-8 pt-10 pb-8 max-w-6xl">
-        {/* Top nav */}
-        <nav className="flex flex-wrap items-center justify-center gap-3 md:gap-4">
+        {/* Top nav — full set on md+, just sound + burger on mobile */}
+        <nav className="hidden md:flex flex-wrap items-center justify-center gap-3 md:gap-4">
           <Link href="/duel" className="nav-pill">[Play Now]</Link>
           <span className="text-white/60 font-black">|</span>
           <Link href="/practice" className="nav-pill">[Practice Room]</Link>
@@ -27,7 +28,12 @@ export default function Landing() {
           <a href="#how" className="nav-pill">[How to Play]</a>
           <span className="text-white/60 font-black">|</span>
           <AuthButton />
-          <div className="ml-auto hidden md:block"><SoundToggle /></div>
+          <span className="text-white/60 font-black">|</span>
+          <SoundToggle className="nav-pill" />
+        </nav>
+        <nav className="md:hidden flex items-center justify-between">
+          <SoundToggle className="nav-pill" />
+          <MobileNav />
         </nav>
 
         {/* Hero */}
@@ -57,7 +63,7 @@ export default function Landing() {
           </div>
 
           <div className="mt-3 text-xs md:text-sm text-white/70 font-mono">
-            no sign-up · no dignity · webcam required
+            no sign-up required · no brain cells required · webcam required
           </div>
         </section>
 
@@ -89,34 +95,34 @@ export default function Landing() {
           </div>
 
           {/* Mock scoreboard card */}
-          <div className="neon-box p-4 sm:col-span-2 lg:col-span-2">
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center text-center">
-              <div className="font-display font-black text-2xl tracking-widest neon-cyan-text">YOU</div>
+          <div className="neon-box p-4 sm:col-span-2 lg:col-span-2 overflow-hidden">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2 sm:gap-3 items-center text-center">
+              <div className="font-display font-black text-lg sm:text-2xl tracking-widest neon-cyan-text truncate">YOU</div>
               <div></div>
-              <div className="font-display font-black text-2xl tracking-widest neon-pink-text">OPPONENT</div>
+              <div className="font-display font-black text-lg sm:text-2xl tracking-widest neon-pink-text truncate">OPPONENT</div>
 
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/6-7-kid-eyes-blazing.jpeg"
                 alt=""
-                className="mx-auto h-24 w-24 object-cover rounded-md border-4 border-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]"
+                className="mx-auto h-16 w-16 sm:h-24 sm:w-24 object-cover rounded-md border-4 border-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]"
               />
-              <div className="font-display font-black text-2xl px-4 py-2 rounded-md bg-black/60 border-4 border-yellow-300 text-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.8)]">
+              <div className="font-display font-black text-base sm:text-2xl px-2 py-1 sm:px-4 sm:py-2 rounded-md bg-black/60 border-2 sm:border-4 border-yellow-300 text-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.8)]">
                 10s
               </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/6-7-kid-eyes-blazing.jpeg"
                 alt=""
-                className="mx-auto h-24 w-24 object-cover rounded-md border-4 border-pink-400 shadow-[0_0_14px_rgba(244,114,182,0.9)]"
+                className="mx-auto h-16 w-16 sm:h-24 sm:w-24 object-cover rounded-md border-4 border-pink-400 shadow-[0_0_14px_rgba(244,114,182,0.9)]"
               />
 
-              <div className="whitespace-nowrap rounded-md bg-cyan-500 border-2 border-cyan-200 py-2 px-3 font-display font-black text-xl tracking-wider text-white shadow-[0_0_10px_rgba(34,211,238,0.7)]" style={{ textShadow: "2px 2px 0 #000" }}>
+              <div className="rounded-md bg-cyan-500 border-2 border-cyan-200 py-1 px-2 sm:py-2 sm:px-3 font-display font-black text-xs sm:text-xl tracking-wider text-white shadow-[0_0_10px_rgba(34,211,238,0.7)] truncate" style={{ textShadow: "2px 2px 0 #000" }}>
                 SCORE: 67
               </div>
               <div></div>
-              <div className="whitespace-nowrap rounded-md bg-pink-500 border-2 border-pink-200 py-2 px-3 font-display font-black text-xl tracking-wider text-white shadow-[0_0_10px_rgba(244,114,182,0.7)]" style={{ textShadow: "2px 2px 0 #000" }}>
-                SCORE: 76
+              <div className="rounded-md bg-pink-500 border-2 border-pink-200 py-1 px-2 sm:py-2 sm:px-3 font-display font-black text-xs sm:text-xl tracking-wider text-white shadow-[0_0_10px_rgba(244,114,182,0.7)] truncate" style={{ textShadow: "2px 2px 0 #000" }}>
+                SCORE: 41
               </div>
             </div>
           </div>
@@ -149,7 +155,6 @@ export default function Landing() {
             <span className="text-white/60 font-black">|</span>
             <a href="#how" className="nav-pill">[How to Play]</a>
           </div>
-          <div className="md:hidden mt-4 flex justify-center"><SoundToggle /></div>
         </footer>
       </div>
     </main>
