@@ -4,35 +4,32 @@ import { useEffect, useRef } from "react";
 import { useSound } from "./SoundToggle";
 
 const SRC = "/Skrilla - Doot Doot (6 7) (Official Music Video).mp3";
+const START_AT = 16;
 
 export function HomeSong() {
   const { on } = useSound();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const a = new Audio(SRC);
+    // Media-fragment URI: the browser starts playback at 16s natively, before
+    // any JS seek runs. This is the only approach that reliably starts at 16s
+    // on iOS Safari, where setting currentTime is a no-op until metadata
+    // loads, and metadata only loads after the gesture-triggered play().
+    const a = new Audio(`${SRC}#t=${START_AT}`);
     a.preload = "auto";
     a.volume = 0.5;
     audioRef.current = a;
 
-    const START_AT = 16;
-    let didInitialSeek = false;
-    // Only count the seek as done when metadata is actually available.
-    // On mobile (esp. iOS), setting currentTime before metadata loads is a
-    // silent no-op, so we must keep retrying on each readiness signal.
-    const seekToStart = () => {
-      if (didInitialSeek) return;
+    // Defensive fallback for any browser that ignores the media fragment:
+    // if playback begins at ~0, snap forward once metadata is available.
+    const ensureStart = () => {
       if (a.readyState < 1) return;
-      try {
-        a.currentTime = START_AT;
-        didInitialSeek = true;
-      } catch {}
+      if (a.currentTime < START_AT - 0.5) {
+        try { a.currentTime = START_AT; } catch {}
+      }
     };
-    a.addEventListener("loadedmetadata", seekToStart);
-    a.addEventListener("loadeddata", seekToStart);
-    a.addEventListener("canplay", seekToStart);
-    a.addEventListener("play", seekToStart);
-    seekToStart();
+    a.addEventListener("loadedmetadata", ensureStart);
+    a.addEventListener("playing", ensureStart);
 
     // Loop back to 0:16 instead of 0:00.
     a.loop = false;
@@ -47,10 +44,7 @@ export function HomeSong() {
     const tryPlay = () => {
       const audio = audioRef.current;
       if (!audio) return;
-      const p = audio.play();
-      if (p && typeof p.then === "function") {
-        p.then(seekToStart).catch(() => {});
-      }
+      audio.play().catch(() => {});
     };
 
     tryPlay();
@@ -65,10 +59,8 @@ export function HomeSong() {
     window.addEventListener("keydown", onGesture);
 
     return () => {
-      a.removeEventListener("loadedmetadata", seekToStart);
-      a.removeEventListener("loadeddata", seekToStart);
-      a.removeEventListener("canplay", seekToStart);
-      a.removeEventListener("play", seekToStart);
+      a.removeEventListener("loadedmetadata", ensureStart);
+      a.removeEventListener("playing", ensureStart);
       a.removeEventListener("ended", onEnded);
       window.removeEventListener("pointerdown", onGesture);
       window.removeEventListener("keydown", onGesture);
