@@ -31,9 +31,12 @@ function setSound(next: boolean) {
 }
 
 export function useSound() {
-  ensureInit();
-  const [on, setOn] = useState(current);
+  // Always start at the SSR-stable default (true). Reading localStorage
+  // during render causes a hydration mismatch because the server has no
+  // window. Sync to the real stored value after mount.
+  const [on, setOn] = useState(true);
   useEffect(() => {
+    ensureInit();
     setOn(current);
     const l = (v: boolean) => setOn(v);
     listeners.add(l);

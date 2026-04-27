@@ -2,7 +2,7 @@
 
 A head-to-head meme-competition web app. Two players, ten seconds, webcam hand-tracking — highest "six-seven" reps wins.
 
-Built with Next.js (App Router), TypeScript, Tailwind, MediaPipe Tasks Vision (hand landmarks), and PeerJS (serverless 1v1 WebRTC rooms).
+Built with Next.js (App Router), TypeScript, Tailwind, MediaPipe Tasks Vision (hand landmarks), PeerJS (serverless 1v1 WebRTC rooms), and Supabase (auth + global leaderboard).
 
 ## Run
 
@@ -29,18 +29,24 @@ app/
     DuelRoom.tsx          the match itself (PeerJS + gesture + scoreboard)
 components/
   WebcamView.tsx          getUserMedia + overlay canvas
+  Rails67.tsx             dashed UP/DOWN guide rails overlay
   Countdown.tsx           3..2..1..GO overlay
   TimerBar.tsx            time-remaining bar
   ScoreCounter.tsx        animated big score
   WinnerScreen.tsx        end-of-match overlay + confetti
   Confetti.tsx
-  Leaderboard.tsx         localStorage-backed top 10
+  Leaderboard.tsx         global (Supabase) top N, falls back to localStorage
+  AuthContext.tsx         Supabase auth provider
+  AuthButton.tsx          sign-in / sign-up / sign-out UI
+  MobileNav.tsx           mobile hamburger menu
+  HomeSong.tsx            landing-page background music
   SoundToggle.tsx         global sound on/off
 lib/
   gestureLogic.ts         pure gesture state machine + tunable constants
   useHandTracking.ts      MediaPipe HandLandmarker hook (dynamic import, VIDEO mode)
   useMatchClock.ts        3-phase (idle/countdown/running/finished) rAF timer
   peerClient.ts           thin PeerJS wrapper (host / guest / message types)
+  supabase.ts             lazy browser-only Supabase client
   memes.ts                banter strings
 ```
 
@@ -81,12 +87,18 @@ The opponent **video** isn't streamed — only their score/combo. This keeps ban
 
 For production: swap `new Peer(...)` for a self-hosted PeerServer (the free broker throttles and occasionally goes down).
 
+## Accounts & leaderboard
+
+- Sign-up / sign-in is handled by Supabase Auth (`components/AuthContext.tsx`, `AuthButton.tsx`).
+- Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to enable it; without those env vars the client is a no-op and the app falls back to localStorage.
+- When signed in, finishing a match writes a row to the `scores` table (`user_id`, `name`, `score`, `mode`). The Leaderboard component reads the top N globally and tags itself "global"; if Supabase is unreachable or empty, it falls back to a localStorage top-10 tagged "local".
+
 ## What's intentionally MVP
 
-- Scores persist in `localStorage` only.
-- No accounts / matchmaking / anti-cheat beyond the gesture-logic sanity checks.
+- No matchmaking / anti-cheat beyond the gesture-logic sanity checks.
 - Sound effects are minimal WebAudio beeps rather than WAV files.
 - Reconnect logic is thin — if the peer drops mid-match the room bails out with an error panel.
+- Public PeerServer broker is used for signaling; for production swap in a self-hosted PeerServer.
 
 ## Tuning tips
 

@@ -127,12 +127,15 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
           runningMode: "VIDEO",
           // Require BOTH hands — strict alternation needs to see each wrist.
           numHands: 2,
-          // Lowered from 0.5 — under motion blur the model is less confident,
-          // and we'd rather get a slightly noisier landmark than no detection.
-          // The state machine handles the noise via debounce + EMA.
-          minHandDetectionConfidence: 0.3,
-          minHandPresenceConfidence: 0.3,
-          minTrackingConfidence: 0.3,
+          // Pushed below MediaPipe's default 0.5 because fast 6-7 motion
+          // blurs frames and the model's confidence drops mid-swing. The
+          // detector counts on relative position, not landmark precision, so
+          // a noisier landmark is still useful — losing the hand entirely is
+          // not. Tracking confidence stays slightly above presence to keep
+          // the inter-frame tracker from latching onto background.
+          minHandDetectionConfidence: 0.2,
+          minHandPresenceConfidence: 0.2,
+          minTrackingConfidence: 0.25,
         });
         if (cancelled) {
           landmarker.close();

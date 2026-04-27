@@ -1,15 +1,18 @@
 /**
- * 6-7 Gesture Detector — opposed-pose counter.
+ * 6-7 Gesture Detector — relative-position counter.
  * ---------------------------------------------------------------------------
  * Rep rule:
- *   • Both hands are simultaneously visible with ANY landmark of one hand in
- *     the TOP zone and ANY landmark of the other hand in the BOTTOM zone.
- *   • Each transition INTO a new opposed configuration counts as one rep.
- *   • Holding the same opposed pose does NOT keep adding reps; flipping to
- *     the mirrored opposed pose (top/bottom hands swapped) counts again.
+ *   • Both hands visible. The "higher" hand is the one whose center Y is
+ *     smaller. A rep is counted each time the higher hand SWAPS, provided the
+ *     vertical separation at the moment of the swap is at least MIN_SEPARATION.
+ *   • Holding the same configuration does not double-count; only the swap.
  *
- * The caller passes per-hand min/max Y (highest and lowest landmark) so the
- * detector treats the whole hand as the trigger, not just the wrist.
+ * Why relative instead of fixed TOP/BOTTOM zones: fast motion blurs the
+ * landmarks and the hands often don't sit in any one zone long enough for a
+ * fixed-zone check to fire. Relative position fires the moment the scales tip
+ * the other way, which is what the user actually does on each rep.
+ *
+ * The TOP_Y / BOTTOM_Y values are kept for the on-screen guide rails only.
  */
 
 export type Wrist = "left" | "right";
@@ -18,17 +21,12 @@ export type Boundary = "top" | "bottom";
 /** Kept for type compatibility with consumers; detector is always IDLE now. */
 export type GestureState = "IDLE" | "ARMED";
 
-interface OpposedConfig {
-  topWrist: Wrist;
-  bottomWrist: Wrist;
-}
-
 export interface GestureConfigShape {
-  /** Y above this = "TOP zone" (in normalized image coords, 0 is top). */
+  /** Y above this = "TOP zone" — kept only for the on-screen guide rails. */
   TOP_Y: number;
-  /** Y below this = "BOTTOM zone". */
+  /** Y below this = "BOTTOM zone" — kept only for the on-screen guide rails. */
   BOTTOM_Y: number;
-  /** Retained for back-compat; unused in the pose-only detector. */
+  /** Retained for back-compat; unused. */
   EDGE_DEBOUNCE_MS: number;
   /** If a wrist hasn't been seen for this long, treat the next sighting as a fresh start. */
   OFFSCREEN_RESUME_MS: number;
@@ -36,6 +34,17 @@ export interface GestureConfigShape {
   EMA_ALPHA: number;
   /** Window in which consecutive reps extend the combo counter (UI flair). */
   COMBO_WINDOW_MS: number;
+  /**
+   * Minimum vertical distance between the two hand centers (normalized image
+   * coords) required at the moment of a swap for it to count as a rep.
+   * Prevents jitter from registering when hands are at nearly equal height.
+   */
+  MIN_SEPARATION: number;
+  /**
+   * Minimum time between counted reps. A natural fast 6-7 is ~5–7 reps/sec,
+   * so 80 ms keeps the cap above hand-speed without admitting jitter bursts.
+   */
+  MIN_REP_INTERVAL_MS: number;
 }
 
 export const GestureConfig: GestureConfigShape = {
@@ -45,6 +54,8 @@ export const GestureConfig: GestureConfigShape = {
   OFFSCREEN_RESUME_MS: 150,
   EMA_ALPHA: 1.0,
   COMBO_WINDOW_MS: 900,
+  MIN_SEPARATION: 0.08,
+  MIN_REP_INTERVAL_MS: 80,
 };
 
 export interface GestureTick {
@@ -98,8 +109,11 @@ export class GestureDetector {
   private rightMinY: number | null = null;
   private rightMaxY: number | null = null;
 
-  // --- last opposed configuration counted (held poses don't double-count) ---
-  private prevOpposed: OpposedConfig | null = null;
+  // --- which hand was on top at the last frame where both were visible ---
+  // Used to detect SWAPS (transitions). Null when we have no prior reading.
+  private prevHigher: Wrist | null = null;
+  // --- timestamp of the last counted rep (for MIN_REP_INTERVAL_MS) ---
+  private lastRepAt = 0;
 
   // --- log ring buffer ---
   private log: GestureLogEntry[] = [];
@@ -119,7 +133,8 @@ export class GestureDetector {
     this.comboExpiresAt = 0;
     this.lastEventAt = 0;
     this.leftMinY = this.leftMaxY = this.rightMinY = this.rightMaxY = null;
-    this.prevOpposed = null;
+    this.prevHigher = null;
+    this.lastRepAt = 0;
     this.log = [];
     this.pushLog(0, "reset");
   }
@@ -131,7 +146,7 @@ export class GestureDetector {
     this.leftMinY = leftMinY != null ? clamp(leftMinY, 0, 1) : null;
     this.leftMaxY = leftMaxY != null ? clamp(leftMaxY, 0, 1) : null;
 
-    this.checkOpposedPose(t);
+    this.checkSwap(t);
 
     if (this.combo > 0 && t > this.comboExpiresAt) this.combo = 0;
 
@@ -140,47 +155,54 @@ export class GestureDetector {
     return this.snapshot(rightVisible, leftVisible);
   }
 
-  private checkOpposedPose(t: number) {
+  private checkSwap(t: number) {
     const lMin = this.leftMinY;
     const lMax = this.leftMaxY;
     const rMin = this.rightMinY;
     const rMax = this.rightMaxY;
     if (lMin == null || lMax == null || rMin == null || rMax == null) {
-      this.prevOpposed = null;
+      // Don't reset prevHigher on a single missing frame — under fast motion
+      // MediaPipe drops a hand briefly, and forgetting which side was higher
+      // would let the next visible swap go uncounted (or double-counted).
       return;
     }
+    // Hand "center" Y = midpoint of its vertical extent. Robust to which
+    // landmark happens to be highest/lowest each frame.
+    const leftY = (lMin + lMax) / 2;
+    const rightY = (rMin + rMax) / 2;
+    const sep = Math.abs(leftY - rightY);
     const cfg = this.config;
-    // "Hand is in top zone" = ANY landmark above TOP_Y (smallest y < TOP_Y).
-    // "Hand is in bottom zone" = ANY landmark below BOTTOM_Y (largest y > BOTTOM_Y).
-    const leftInTop = lMin < cfg.TOP_Y;
-    const leftInBottom = lMax > cfg.BOTTOM_Y;
-    const rightInTop = rMin < cfg.TOP_Y;
-    const rightInBottom = rMax > cfg.BOTTOM_Y;
-    let current: OpposedConfig | null = null;
-    if (leftInTop && rightInBottom && !(rightInTop && leftInBottom)) {
-      current = { topWrist: "left", bottomWrist: "right" };
-    } else if (rightInTop && leftInBottom && !(leftInTop && rightInBottom)) {
-      current = { topWrist: "right", bottomWrist: "left" };
-    }
-    if (!current) {
-      this.prevOpposed = null;
+
+    // Determine current "higher" hand. With low separation we can't tell, so
+    // we don't update prevHigher — that way the next clear pose is judged
+    // against the last clear pose, not against an ambiguous middle frame.
+    if (sep < cfg.MIN_SEPARATION) return;
+    const currentHigher: Wrist = leftY < rightY ? "left" : "right";
+
+    if (this.prevHigher == null) {
+      // First clear reading — establish baseline without scoring.
+      this.prevHigher = currentHigher;
       return;
     }
-    const same =
-      this.prevOpposed &&
-      this.prevOpposed.topWrist === current.topWrist &&
-      this.prevOpposed.bottomWrist === current.bottomWrist;
-    if (same) return;
+    if (currentHigher === this.prevHigher) return;
+
+    // Rate-limit: prevents jitter bursts from inflating the counter beyond
+    // physically plausible hand speed.
+    if (t - this.lastRepAt < cfg.MIN_REP_INTERVAL_MS) {
+      this.prevHigher = currentHigher;
+      return;
+    }
 
     this.reps += 1;
+    this.lastRepAt = t;
     if (t < this.comboExpiresAt) this.combo += 1;
     else this.combo = 1;
-    this.comboExpiresAt = t + this.config.COMBO_WINDOW_MS;
+    this.comboExpiresAt = t + cfg.COMBO_WINDOW_MS;
     this.lastEventAt = t;
-    this.prevOpposed = current;
+    this.prevHigher = currentHigher;
     this.pushLog(
       t,
-      `rep=${this.reps} ✓ (top=${current.topWrist}, bottom=${current.bottomWrist})`,
+      `rep=${this.reps} ✓ (higher=${currentHigher}, sep=${sep.toFixed(2)})`,
     );
     this.onRep?.(this.snapshot(true, true));
   }
