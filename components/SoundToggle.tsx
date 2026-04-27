@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 const KEY = "sixseven:sound";
 
 // Shared store so every useSound() consumer sees the same value live.
-let current = true;
+let current = false;
 const listeners = new Set<(v: boolean) => void>();
 let initialized = false;
 
@@ -31,10 +31,10 @@ function setSound(next: boolean) {
 }
 
 export function useSound() {
-  // Always start at the SSR-stable default (true). Reading localStorage
+  // Always start at the SSR-stable default (false). Reading localStorage
   // during render causes a hydration mismatch because the server has no
   // window. Sync to the real stored value after mount.
-  const [on, setOn] = useState(true);
+  const [on, setOn] = useState(false);
   useEffect(() => {
     ensureInit();
     setOn(current);
