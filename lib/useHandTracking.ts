@@ -7,7 +7,17 @@ import { GestureDetector, GestureSnapshot, HandLandmark } from "./gestureLogic";
 /**
  * Loads MediaPipe Tasks Vision, runs HandLandmarker in VIDEO mode, classifies
  * each detected hand as "left" or "right" from the USER'S perspective, and
- * feeds both wrist Y values per frame into the GestureDetector.
+ * feeds both palm-center Y values per frame into the GestureDetector.
+ *
+ * Tracking point is the palm CENTER (centroid of landmarks 0, 5, 9, 13, 17 —
+ * wrist + 4 MCP knuckles), not the wrist. The palm center is closer to the
+ * actual mass of the hand, which is what the user sees flying around during
+ * a fast 6-7. The wrist alone trails behind the visible hand and reads as
+ * "lag" even when the model itself is keeping up.
+ *
+ * Per-hand velocity is tracked in normalized image units per millisecond and
+ * exposed on the hands ref so the overlay can extrapolate the dot to "now"
+ * — compensating for the ~20–30 ms between camera capture and overlay paint.
  */
 
 const WASM_BASE =
@@ -21,7 +31,7 @@ const MODEL_URL =
  * so its "Left"/"Right" already match the user's anatomical hands.
  */
 function labelHand(
-  wrist: { x: number; y: number },
+  palm: { x: number; y: number },
   raw: string | undefined,
 ): "left" | "right" {
   if (raw === "Left") return "left";
@@ -29,7 +39,7 @@ function labelHand(
   // No handedness for this frame — fall back to image x. In the raw
   // (unmirrored) image, a hand on the LEFT side (x<0.5) belongs to the
   // user's RIGHT hand under the selfie-mirror displayed to the user.
-  return wrist.x < 0.5 ? "right" : "left";
+  return palm.x < 0.5 ? "right" : "left";
 }
 
 export interface UseHandTrackingOptions {
@@ -38,21 +48,54 @@ export interface UseHandTrackingOptions {
   onRep?: (snapshot: GestureSnapshot) => void;
 }
 
+/** Tracked hand point + instantaneous velocity, used by the overlay for
+ *  zero-lag extrapolation. */
+export interface PalmPoint {
+  /** Palm-center X in normalized image coords. */
+  x: number;
+  /** Palm-center Y in normalized image coords. */
+  y: number;
+  /** performance.now() timestamp this position was measured. */
+  t: number;
+  /** Velocity in normalized units per millisecond. */
+  vx: number;
+  vy: number;
+}
+
 export interface TrackedHands {
   left: HandLandmark[] | null;
   right: HandLandmark[] | null;
+  /** Palm center + velocity for the user's left hand, or null if absent. */
+  leftPalm: PalmPoint | null;
+  /** Palm center + velocity for the user's right hand, or null if absent. */
+  rightPalm: PalmPoint | null;
 }
 
-/** Wrist landmark cached for nearest-neighbour assignment across frames. */
-interface WristTrack {
+/** Palm-center landmarks cached for nearest-neighbour assignment across frames. */
+interface PalmTrack {
   x: number;
   y: number;
   /** performance.now() timestamp the position was last updated. */
   t: number;
 }
 
-/** How long a remembered wrist position is allowed to influence assignment. */
-const WRIST_TRACK_TTL_MS = 800;
+/** How long a remembered palm position is allowed to influence assignment. */
+const PALM_TRACK_TTL_MS = 800;
+
+/** MediaPipe hand landmarks that define the palm: wrist + 4 MCP knuckles.
+ *  Their centroid sits near the geometric center of the hand and barely moves
+ *  when fingers curl, so it's a much more stable tracking point than the wrist. */
+const PALM_LANDMARKS = [0, 5, 9, 13, 17] as const;
+
+function palmCenter(h: HandLandmark[]): { x: number; y: number } {
+  let sx = 0;
+  let sy = 0;
+  for (const i of PALM_LANDMARKS) {
+    sx += h[i].x;
+    sy += h[i].y;
+  }
+  return { x: sx / PALM_LANDMARKS.length, y: sy / PALM_LANDMARKS.length };
+}
 
 const dist2 = (a: { x: number; y: number }, b: { x: number; y: number }) => {
   const dx = a.x - b.x;
@@ -65,14 +108,19 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastVideoTimeRef = useRef(-1);
-  // Last-known wrist positions used for sticky left/right assignment when
-  // MediaPipe's per-frame handedness flickers under fast motion.
-  const lastLeftRef = useRef<WristTrack | null>(null);
-  const lastRightRef = useRef<WristTrack | null>(null);
+  // Last-known palm-center positions used for sticky left/right assignment
+  // when MediaPipe's per-frame handedness flickers under fast motion.
+  const lastLeftRef = useRef<PalmTrack | null>(null);
+  const lastRightRef = useRef<PalmTrack | null>(null);
   // Per-frame hand landmarks live in a ref, NOT in React state, so the
   // overlay can paint at full camera framerate without paying for a render
   // cycle each frame (which would add ~16-50ms of perceived latency).
-  const handsRef = useRef<TrackedHands>({ left: null, right: null });
+  const handsRef = useRef<TrackedHands>({
+    left: null,
+    right: null,
+    leftPalm: null,
+    rightPalm: null,
+  });
   const lastSnapshotRef = useRef<GestureSnapshot | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +136,7 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
     detectorRef.current.reset();
     lastLeftRef.current = null;
     lastRightRef.current = null;
-    handsRef.current = { left: null, right: null };
+    handsRef.current = { left: null, right: null, leftPalm: null, rightPalm: null };
     const fresh = detectorRef.current.snapshot(false, false);
     lastSnapshotRef.current = fresh;
     setSnapshot(fresh);
@@ -157,90 +205,105 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
                 const lms = (res.landmarks ?? []) as HandLandmark[][];
                 const hd = res.handedness ?? [];
 
-                // Expire stale wrist tracks so a long disappearance can't
+                // Expire stale palm tracks so a long disappearance can't
                 // misclassify a hand that reappeared somewhere unexpected.
-                if (lastLeftRef.current && t - lastLeftRef.current.t > WRIST_TRACK_TTL_MS) {
+                if (lastLeftRef.current && t - lastLeftRef.current.t > PALM_TRACK_TTL_MS) {
                   lastLeftRef.current = null;
                 }
-                if (lastRightRef.current && t - lastRightRef.current.t > WRIST_TRACK_TTL_MS) {
+                if (lastRightRef.current && t - lastRightRef.current.t > PALM_TRACK_TTL_MS) {
                   lastRightRef.current = null;
                 }
 
                 let leftHand: HandLandmark[] | null = null;
                 let rightHand: HandLandmark[] | null = null;
+                // Pre-compute palm centers once per detected hand — used for
+                // assignment, velocity tracking, and the gesture detector.
+                const palms = lms.map((h) => palmCenter(h));
 
                 if (lms.length === 2) {
                   // Two hands detected — assign by minimum total distance to
                   // last-known positions when available; otherwise fall back to
                   // MediaPipe handedness, then to image x-position.
-                  const w0 = lms[0][0];
-                  const w1 = lms[1][0];
+                  const p0 = palms[0];
+                  const p1 = palms[1];
                   const pl = lastLeftRef.current;
                   const pr = lastRightRef.current;
                   if (pl && pr) {
-                    const same = dist2(w0, pl) + dist2(w1, pr);
-                    const swap = dist2(w0, pr) + dist2(w1, pl);
+                    const same = dist2(p0, pl) + dist2(p1, pr);
+                    const swap = dist2(p0, pr) + dist2(p1, pl);
                     if (same <= swap) { leftHand = lms[0]; rightHand = lms[1]; }
                     else { leftHand = lms[1]; rightHand = lms[0]; }
                   } else {
                     for (let i = 0; i < 2; i++) {
-                      const label = labelHand(lms[i][0], hd[i]?.[0]?.categoryName);
+                      const label = labelHand(palms[i], hd[i]?.[0]?.categoryName);
                       if (label === "left" && !leftHand) leftHand = lms[i];
                       else if (label === "right" && !rightHand) rightHand = lms[i];
                     }
                     // If both ended up on the same side, split by image x.
                     if (!leftHand || !rightHand) {
-                      const sorted = [...lms].sort((a, b) => a[0].x - b[0].x);
+                      const idx = palms[0].x <= palms[1].x ? [0, 1] : [1, 0];
                       // raw image: smaller x = user's right hand
-                      rightHand = sorted[0];
-                      leftHand = sorted[1];
+                      rightHand = lms[idx[0]];
+                      leftHand = lms[idx[1]];
                     }
                   }
                 } else if (lms.length === 1) {
                   // One hand — prefer last-known nearest, then handedness.
-                  const w = lms[0][0];
+                  const p = palms[0];
                   const pl = lastLeftRef.current;
                   const pr = lastRightRef.current;
                   if (pl && pr) {
-                    if (dist2(w, pl) <= dist2(w, pr)) leftHand = lms[0];
+                    if (dist2(p, pl) <= dist2(p, pr)) leftHand = lms[0];
                     else rightHand = lms[0];
                   } else if (pl) {
                     leftHand = lms[0];
                   } else if (pr) {
                     rightHand = lms[0];
                   } else {
-                    const label = labelHand(w, hd[0]?.[0]?.categoryName);
+                    const label = labelHand(p, hd[0]?.[0]?.categoryName);
                     if (label === "left") leftHand = lms[0];
                     else rightHand = lms[0];
                   }
                 }
 
-                if (leftHand) lastLeftRef.current = { x: leftHand[0].x, y: leftHand[0].y, t };
-                if (rightHand) lastRightRef.current = { x: rightHand[0].x, y: rightHand[0].y, t };
+                // Resolve the palm center belonging to each assigned hand.
+                const leftPalm = leftHand ? palms[lms.indexOf(leftHand)] : null;
+                const rightPalm = rightHand ? palms[lms.indexOf(rightHand)] : null;
+
+                // Velocity = (current - last) / dt, in normalized units per ms.
+                // Used by the overlay to extrapolate the dot forward by the
+                // model's inference latency, eliminating the perceived lag.
+                const computeVel = (
+                  cur: { x: number; y: number } | null,
+                  prev: PalmTrack | null,
+                ) => {
+                  if (!cur || !prev) return { vx: 0, vy: 0 };
+                  const dt = t - prev.t;
+                  if (dt <= 0 || dt > 100) return { vx: 0, vy: 0 };
+                  return { vx: (cur.x - prev.x) / dt, vy: (cur.y - prev.y) / dt };
+                };
+                const leftVel = computeVel(leftPalm, lastLeftRef.current);
+                const rightVel = computeVel(rightPalm, lastRightRef.current);
+
+                if (leftPalm) lastLeftRef.current = { x: leftPalm.x, y: leftPalm.y, t };
+                if (rightPalm) lastRightRef.current = { x: rightPalm.x, y: rightPalm.y, t };
 
                 // Synchronous ref update — overlay reads this without waiting
                 // for a React render.
-                handsRef.current = { left: leftHand, right: rightHand };
-
-                // ---- Feed the detector: per-hand vertical extents across all landmarks ----
-                const extents = (h: HandLandmark[] | null) => {
-                  if (!h || h.length === 0) return { min: null, max: null } as const;
-                  let min = h[0].y;
-                  let max = h[0].y;
-                  for (let i = 1; i < h.length; i++) {
-                    const y = h[i].y;
-                    if (y < min) min = y;
-                    if (y > max) max = y;
-                  }
-                  return { min, max } as const;
+                handsRef.current = {
+                  left: leftHand,
+                  right: rightHand,
+                  leftPalm: leftPalm
+                    ? { x: leftPalm.x, y: leftPalm.y, t, vx: leftVel.vx, vy: leftVel.vy }
+                    : null,
+                  rightPalm: rightPalm
+                    ? { x: rightPalm.x, y: rightPalm.y, t, vx: rightVel.vx, vy: rightVel.vy }
+                    : null,
                 };
-                const re = extents(rightHand);
-                const le = extents(leftHand);
+
                 const snap = detectorRef.current.update({
-                  rightMinY: re.min,
-                  rightMaxY: re.max,
-                  leftMinY: le.min,
-                  leftMaxY: le.max,
+                  rightY: rightPalm ? rightPalm.y : null,
+                  leftY: leftPalm ? leftPalm.y : null,
                   t,
                 });
                 publishSnapshot(snap);

@@ -59,12 +59,10 @@ export const GestureConfig: GestureConfigShape = {
 };
 
 export interface GestureTick {
-  /** Smallest (highest on screen) landmark Y of the right hand, or null if absent. */
-  rightMinY: number | null;
-  /** Largest (lowest on screen) landmark Y of the right hand, or null if absent. */
-  rightMaxY: number | null;
-  leftMinY: number | null;
-  leftMaxY: number | null;
+  /** Y of the right palm center (centroid of wrist + 4 MCP joints), null if absent. */
+  rightY: number | null;
+  /** Y of the left palm center (centroid of wrist + 4 MCP joints), null if absent. */
+  leftY: number | null;
   t: number;
 }
 
@@ -103,11 +101,9 @@ export class GestureDetector {
   private comboExpiresAt = 0;
   private lastEventAt = 0;
 
-  // --- latest per-hand vertical extents (any landmark) ---
-  private leftMinY: number | null = null;
-  private leftMaxY: number | null = null;
-  private rightMinY: number | null = null;
-  private rightMaxY: number | null = null;
+  // --- latest per-hand palm-center Y ---
+  private leftY: number | null = null;
+  private rightY: number | null = null;
 
   // --- which hand was on top at the last frame where both were visible ---
   // Used to detect SWAPS (transitions). Null when we have no prior reading.
@@ -132,7 +128,7 @@ export class GestureDetector {
     this.combo = 0;
     this.comboExpiresAt = 0;
     this.lastEventAt = 0;
-    this.leftMinY = this.leftMaxY = this.rightMinY = this.rightMaxY = null;
+    this.leftY = this.rightY = null;
     this.prevHigher = null;
     this.lastRepAt = 0;
     this.log = [];
@@ -140,36 +136,28 @@ export class GestureDetector {
   }
 
   update(tick: GestureTick): GestureSnapshot {
-    const { rightMinY, rightMaxY, leftMinY, leftMaxY, t } = tick;
-    this.rightMinY = rightMinY != null ? clamp(rightMinY, 0, 1) : null;
-    this.rightMaxY = rightMaxY != null ? clamp(rightMaxY, 0, 1) : null;
-    this.leftMinY = leftMinY != null ? clamp(leftMinY, 0, 1) : null;
-    this.leftMaxY = leftMaxY != null ? clamp(leftMaxY, 0, 1) : null;
+    const { rightY, leftY, t } = tick;
+    this.rightY = rightY != null ? clamp(rightY, 0, 1) : null;
+    this.leftY = leftY != null ? clamp(leftY, 0, 1) : null;
 
     this.checkSwap(t);
 
     if (this.combo > 0 && t > this.comboExpiresAt) this.combo = 0;
 
-    const rightVisible = rightMinY != null;
-    const leftVisible = leftMinY != null;
+    const rightVisible = rightY != null;
+    const leftVisible = leftY != null;
     return this.snapshot(rightVisible, leftVisible);
   }
 
   private checkSwap(t: number) {
-    const lMin = this.leftMinY;
-    const lMax = this.leftMaxY;
-    const rMin = this.rightMinY;
-    const rMax = this.rightMaxY;
-    if (lMin == null || lMax == null || rMin == null || rMax == null) {
+    const leftY = this.leftY;
+    const rightY = this.rightY;
+    if (leftY == null || rightY == null) {
       // Don't reset prevHigher on a single missing frame — under fast motion
       // MediaPipe drops a hand briefly, and forgetting which side was higher
       // would let the next visible swap go uncounted (or double-counted).
       return;
     }
-    // Hand "center" Y = midpoint of its vertical extent. Robust to which
-    // landmark happens to be highest/lowest each frame.
-    const leftY = (lMin + lMax) / 2;
-    const rightY = (rMin + rMax) / 2;
     const sep = Math.abs(leftY - rightY);
     const cfg = this.config;
 
@@ -235,14 +223,8 @@ export class GestureDetector {
       handVisible: rightVisible || leftVisible,
       rightVisible,
       leftVisible,
-      smoothedLeftY:
-        this.leftMinY != null && this.leftMaxY != null
-          ? (this.leftMinY + this.leftMaxY) / 2
-          : null,
-      smoothedRightY:
-        this.rightMinY != null && this.rightMaxY != null
-          ? (this.rightMinY + this.rightMaxY) / 2
-          : null,
+      smoothedLeftY: this.leftY,
+      smoothedRightY: this.rightY,
       log: this.log.slice(),
     };
   }

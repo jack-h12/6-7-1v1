@@ -3,11 +3,30 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { GestureState, HandLandmark } from "@/lib/gestureLogic";
 
+interface PalmRef {
+  x: number;
+  y: number;
+  t: number;
+  vx: number;
+  vy: number;
+}
+
+interface OverlayHands {
+  left: HandLandmark[] | null;
+  right: HandLandmark[] | null;
+  leftPalm: PalmRef | null;
+  rightPalm: PalmRef | null;
+}
+
+/** Cap on how far we extrapolate the palm forward in time. Above ~50 ms the
+ *  prediction overshoots noticeably when the hand suddenly stops or reverses. */
+const MAX_PREDICTION_MS = 50;
+
 export interface WebcamViewProps {
   active: boolean;
   /** Live ref to classified hands from the tracker — read every animation frame
    *  so the overlay paints with no React-render latency. */
-  handsRef?: React.RefObject<{ left: HandLandmark[] | null; right: HandLandmark[] | null }>;
+  handsRef?: React.RefObject<OverlayHands>;
   /** Normalized Y thresholds for overlay lines. */
   topLine?: number;
   bottomLine?: number;
@@ -121,8 +140,9 @@ export const WebcamView = forwardRef<HTMLVideoElement, WebcamViewProps>(function
           ctx.setLineDash([]);
 
           const hands = handsRef?.current;
-          if (hands?.right) drawWrist(ctx, hands.right[0], c, "R", "#ffe600", mirrored);
-          if (hands?.left)  drawWrist(ctx, hands.left[0],  c, "L", "#ff2ea6", mirrored);
+          const now = performance.now();
+          if (hands?.rightPalm) drawPalm(ctx, hands.rightPalm, now, c, "R", "#ffe600", mirrored);
+          if (hands?.leftPalm)  drawPalm(ctx, hands.leftPalm,  now, c, "L", "#ff2ea6", mirrored);
         }
       }
       raf = requestAnimationFrame(draw);
@@ -172,18 +192,25 @@ export const WebcamView = forwardRef<HTMLVideoElement, WebcamViewProps>(function
   );
 });
 
-function drawWrist(
+function drawPalm(
   ctx: CanvasRenderingContext2D,
-  p: HandLandmark,
+  p: PalmRef,
+  now: number,
   c: HTMLCanvasElement,
   tag: string,
   color: string,
   mirrored: boolean
 ) {
+  // Extrapolate the palm forward to "now" using its measured velocity. The
+  // model's inference + capture latency is normally ~20–30 ms, so without
+  // this the dot trails noticeably behind the visible hand on fast 6-7s.
+  const dt = Math.min(Math.max(now - p.t, 0), MAX_PREDICTION_MS);
+  const px = p.x + p.vx * dt;
+  const py = p.y + p.vy * dt;
   // The canvas itself is CSS-mirrored when `mirrored` is true, so drawing in
-  // raw landmark coordinates already lines the dot up with the visible wrist.
-  const x = p.x * c.width;
-  const y = p.y * c.height;
+  // raw landmark coordinates already lines the dot up with the visible hand.
+  const x = px * c.width;
+  const y = py * c.height;
   ctx.fillStyle = color;
   ctx.strokeStyle = "black";
   ctx.lineWidth = 3;
