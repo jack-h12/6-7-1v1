@@ -77,10 +77,28 @@ interface PalmTrack {
   y: number;
   /** performance.now() timestamp the position was last updated. */
   t: number;
+  /** EMA-smoothed velocity in normalized units per ms. */
+  vx: number;
+  vy: number;
 }
+
+/** EMA weight applied to each new instantaneous velocity sample. Lower = smoother
+ *  but laggier reaction to direction changes. 0.4 keeps ~3 frames of history,
+ *  enough to stop single-frame jitter from flinging the dot at swap turnarounds
+ *  without smearing the response so much that the dot feels detached. */
+const VELOCITY_EMA_ALPHA = 0.4;
 
 /** How long a remembered palm position is allowed to influence assignment. */
 const PALM_TRACK_TTL_MS = 800;
+
+/** How long a hand can be undetected before we stop feeding its last-known Y
+ *  into the gesture detector. Tuned to span MediaPipe's typical drop windows
+ *  during fast 6-7 motion (often 200–400 ms when motion blur knocks tracking
+ *  off) without bridging arbitrarily long disappearances. The detector rule
+ *  (relative position flip) self-corrects on the next clean frame, so a stale
+ *  Y can only over-count if it survives across a genuine pose change AND the
+ *  visible hand crosses past the stale Y in the wrong direction — both rare. */
+const STALE_Y_MAX_AGE_MS = 500;
 
 /** MediaPipe hand landmarks that define the palm: wrist + 4 MCP knuckles.
  *  Their centroid sits near the geometric center of the hand and barely moves
@@ -175,15 +193,16 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
           runningMode: "VIDEO",
           // Require BOTH hands — strict alternation needs to see each wrist.
           numHands: 2,
-          // Pushed below MediaPipe's default 0.5 because fast 6-7 motion
-          // blurs frames and the model's confidence drops mid-swing. The
-          // detector counts on relative position, not landmark precision, so
-          // a noisier landmark is still useful — losing the hand entirely is
-          // not. Tracking confidence stays slightly above presence to keep
-          // the inter-frame tracker from latching onto background.
-          minHandDetectionConfidence: 0.2,
-          minHandPresenceConfidence: 0.2,
-          minTrackingConfidence: 0.25,
+          // Pushed well below MediaPipe's default 0.5 because fast 6-7 motion
+          // blurs frames and the model's confidence collapses mid-swing. The
+          // gesture detector only needs Y position (not landmark precision),
+          // so trading accuracy for tracking stickiness is the right call —
+          // losing the hand entirely costs us a missed rep, while a noisy
+          // landmark just produces a slightly wobbly Y that the swap rule
+          // shrugs off.
+          minHandDetectionConfidence: 0.1,
+          minHandPresenceConfidence: 0.1,
+          minTrackingConfidence: 0.1,
         });
         if (cancelled) {
           landmarker.close();
@@ -270,9 +289,11 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
                 const leftPalm = leftHand ? palms[lms.indexOf(leftHand)] : null;
                 const rightPalm = rightHand ? palms[lms.indexOf(rightHand)] : null;
 
-                // Velocity = (current - last) / dt, in normalized units per ms.
-                // Used by the overlay to extrapolate the dot forward by the
-                // model's inference latency, eliminating the perceived lag.
+                // Velocity = (current - last) / dt, smoothed with an EMA over
+                // recent frames. Used by the overlay to extrapolate the dot
+                // forward by inference latency. Smoothing matters most at 6-7
+                // swap turnarounds, where instantaneous velocity flips sign and
+                // a raw single-frame estimate would fling the dot past the turn.
                 const computeVel = (
                   cur: { x: number; y: number } | null,
                   prev: PalmTrack | null,
@@ -280,13 +301,30 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
                   if (!cur || !prev) return { vx: 0, vy: 0 };
                   const dt = t - prev.t;
                   if (dt <= 0 || dt > 100) return { vx: 0, vy: 0 };
-                  return { vx: (cur.x - prev.x) / dt, vy: (cur.y - prev.y) / dt };
+                  const instVx = (cur.x - prev.x) / dt;
+                  const instVy = (cur.y - prev.y) / dt;
+                  const a = VELOCITY_EMA_ALPHA;
+                  return {
+                    vx: a * instVx + (1 - a) * prev.vx,
+                    vy: a * instVy + (1 - a) * prev.vy,
+                  };
                 };
                 const leftVel = computeVel(leftPalm, lastLeftRef.current);
                 const rightVel = computeVel(rightPalm, lastRightRef.current);
 
-                if (leftPalm) lastLeftRef.current = { x: leftPalm.x, y: leftPalm.y, t };
-                if (rightPalm) lastRightRef.current = { x: rightPalm.x, y: rightPalm.y, t };
+                // Snapshot prior tracks before they're overwritten — used below
+                // to fill in a stale Y for whichever hand MediaPipe dropped this
+                // frame, so the gesture detector can still see a swap when the
+                // visible hand crosses the missing hand's last-known position.
+                const priorLeft = lastLeftRef.current;
+                const priorRight = lastRightRef.current;
+
+                if (leftPalm) {
+                  lastLeftRef.current = { x: leftPalm.x, y: leftPalm.y, t, vx: leftVel.vx, vy: leftVel.vy };
+                }
+                if (rightPalm) {
+                  lastRightRef.current = { x: rightPalm.x, y: rightPalm.y, t, vx: rightVel.vx, vy: rightVel.vy };
+                }
 
                 // Synchronous ref update — overlay reads this without waiting
                 // for a React render.
@@ -301,9 +339,21 @@ export function useHandTracking({ enabled, videoRef, onRep }: UseHandTrackingOpt
                     : null,
                 };
 
+                // If a hand is undetected this frame but was seen recently,
+                // feed its last-known Y to the detector. Mid-swap motion blur
+                // drops the fast-moving hand for 1–3 frames; without this the
+                // rep stalls until re-acquisition and lands ~30–80 ms late.
+                const fallbackY = (
+                  current: { y: number } | null,
+                  prior: PalmTrack | null,
+                ) => {
+                  if (current) return current.y;
+                  if (prior && t - prior.t < STALE_Y_MAX_AGE_MS) return prior.y;
+                  return null;
+                };
                 const snap = detectorRef.current.update({
-                  rightY: rightPalm ? rightPalm.y : null,
-                  leftY: leftPalm ? leftPalm.y : null,
+                  rightY: fallbackY(rightPalm, priorRight),
+                  leftY: fallbackY(leftPalm, priorLeft),
                   t,
                 });
                 publishSnapshot(snap);

@@ -18,9 +18,12 @@ interface OverlayHands {
   rightPalm: PalmRef | null;
 }
 
-/** Cap on how far we extrapolate the palm forward in time. Above ~50 ms the
- *  prediction overshoots noticeably when the hand suddenly stops or reverses. */
-const MAX_PREDICTION_MS = 50;
+/** Cap on how far we extrapolate the palm forward in time. Total pipeline
+ *  latency (camera capture + main-thread inference + RAF wait + display)
+ *  typically runs 60–90 ms; raising the cap covers more of it. The matching
+ *  EMA-smoothed velocity in useHandTracking keeps direction-change overshoot
+ *  in check at this longer horizon. */
+const MAX_PREDICTION_MS = 80;
 
 export interface WebcamViewProps {
   active: boolean;
